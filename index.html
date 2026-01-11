@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Mini GTA - Police Respawn</title>
+  <style>
+    body { margin:0; overflow:hidden; }
+    #ui{
+      position:absolute;
+      top:10px; left:10px;
+      color:white;
+      font-family:Arial;
+      background:rgba(0,0,0,0.6);
+      padding:10px;
+    }
+  </style>
+</head>
+<body>
+
+<div id="ui">
+  W A S D = Walk / Drive<br>
+  E = Enter / Exit Car<br>
+  Mouse Click = Shoot<br>
+  Wanted ⭐: <span id="wanted">0</span>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+
+<script>
+// ================= BASIC =================
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87ceeb);
+
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer();
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+// ================= LIGHT =================
+scene.add(new THREE.AmbientLight(0xffffff,0.7));
+const sun = new THREE.DirectionalLight(0xffffff,0.6);
+sun.position.set(50,50,20);
+scene.add(sun);
+
+// ================= GROUND =================
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(500,500),
+  new THREE.MeshStandardMaterial({color:0x3cb371})
+);
+ground.rotation.x = -Math.PI/2;
+scene.add(ground);
+
+// ================= ROADS =================
+function road(x,z,w,h){
+  const r = new THREE.Mesh(
+    new THREE.PlaneGeometry(w,h),
+    new THREE.MeshStandardMaterial({color:0x333333})
+  );
+  r.rotation.x = -Math.PI/2;
+  r.position.set(x,0.02,z);
+  scene.add(r);
+}
+road(0,0,20,500);
+road(50,0,20,500);
+road(-50,0,20,500);
+road(0,0,500,20);
+
+// ================= PLAYER =================
+const player = new THREE.Mesh(
+  new THREE.BoxGeometry(1,2,1),
+  new THREE.MeshStandardMaterial({color:0xff0000})
+);
+player.position.set(0,1,40);
+scene.add(player);
+
+// ================= CAR =================
+const car = new THREE.Mesh(
+  new THREE.BoxGeometry(2,1,4),
+  new THREE.MeshStandardMaterial({color:0x0000ff})
+);
+car.position.set(0,0.5,20);
+scene.add(car);
+
+let inCar=false, canToggle=true;
+
+// ================= TRAFFIC =================
+const traffic=[];
+function addTraffic(x,z,color){
+  const c=new THREE.Mesh(
+    new THREE.BoxGeometry(2,1,4),
+    new THREE.MeshStandardMaterial({color})
+  );
+  c.position.set(x,0.5,z);
+  scene.add(c);
+  traffic.push(c);
+}
+for(let i=0;i<5;i++){
+  addTraffic(50,i*60-150,0xffaa00);
+  addTraffic(-50,i*60-150,0x00ffff);
+}
+
+// ================= NPC MEN =================
+const npcs=[];
+function createNPC(x,z){
+  const n=new THREE.Mesh(
+    new THREE.BoxGeometry(1,2,1),
+    new THREE.MeshStandardMaterial({color:0xaaaaaa})
+  );
+  n.position.set(x,1,z);
+  scene.add(n);
+  npcs.push(n);
+}
+for(let i=0;i<6;i++){
+  createNPC(Math.random()*80-40,Math.random()*80-40);
+}
+
+// ================= POLICE =================
+const police=[];
+function spawnPolice(){
+  const p=new THREE.Mesh(
+    new THREE.BoxGeometry(2,2,2),
+    new THREE.MeshStandardMaterial({color:0x000000})
+  );
+  p.position.set(
+    Math.random()>0.5?70:-70,
+    1,
+    Math.random()*60-30
+  );
+  scene.add(p);
+  police.push(p);
+}
+spawnPolice();
+
+// ================= CONTROLS =================
+const keys={};
+window.addEventListener("keydown",e=>keys[e.key.toLowerCase()]=true);
+window.addEventListener("keyup",e=>keys[e.key.toLowerCase()]=false);
+
+// ================= GUN =================
+let bullets=[];
+let wanted=0;
+const wantedText=document.getElementById("wanted");
+
+window.addEventListener("click",()=>{
+  const b=new THREE.Mesh(
+    new THREE.SphereGeometry(0.15),
+    new THREE.MeshBasicMaterial({color:0xffff00})
+  );
+  b.position.copy(player.position);
+  scene.add(b);
+  bullets.push(b);
+});
+
+// ================= GAME LOOP =================
+function animate(){
+  requestAnimationFrame(animate);
+
+  // ENTER / EXIT CAR
+  if(keys["e"] && canToggle){
+    canToggle=false;
+    if(!inCar && player.position.distanceTo(car.position)<3){
+      inCar=true;
+    }else if(inCar){
+      inCar=false;
+      player.position.set(car.position.x+2,1,car.position.z);
+    }
+    setTimeout(()=>canToggle=true,300);
+  }
+
+  // WALK
+  if(!inCar){
+    if(keys["w"]) player.position.z-=0.3;
+    if(keys["s"]) player.position.z+=0.3;
+    if(keys["a"]) player.position.x-=0.3;
+    if(keys["d"]) player.position.x+=0.3;
+
+    camera.position.set(player.position.x,player.position.y+6,player.position.z+12);
+    camera.lookAt(player.position);
+  }
+
+  // DRIVE
+  if(inCar){
+    if(keys["w"]) car.translateZ(-0.6);
+    if(keys["s"]) car.translateZ(0.6);
+    if(keys["a"]) car.rotation.y+=0.05;
+    if(keys["d"]) car.rotation.y-=0.05;
+
+    camera.position.set(car.position.x,car.position.y+6,car.position.z+12);
+    camera.lookAt(car.position);
+  }
+
+  // TRAFFIC MOVE
+  traffic.forEach(t=>{
+    t.translateZ(-0.4);
+    if(t.position.z<-250) t.position.z=250;
+  });
+
+  // BULLETS HIT
+  bullets.forEach((b,bi)=>{
+    b.translateZ(-1);
+
+    // HIT NPC
+    npcs.forEach((n,ni)=>{
+      if(b.position.distanceTo(n.position)<1){
+        scene.remove(n);
+        npcs.splice(ni,1);
+        scene.remove(b);
+        bullets.splice(bi,1);
+        wanted++;
+        wantedText.innerText=wanted;
+        spawnPolice();
+      }
+    });
+
+    // HIT POLICE
+    police.forEach((p,pi)=>{
+      if(b.position.distanceTo(p.position)<1){
+        scene.remove(p);
+        police.splice(pi,1);
+        scene.remove(b);
+        bullets.splice(bi,1);
+
+        // RESPAWN POLICE AFTER 2s
+        setTimeout(spawnPolice,2000);
+      }
+    });
+  });
+
+  // POLICE CHASE
+  if(wanted>0){
+    police.forEach(p=>{
+      const target=inCar?car.position:player.position;
+      p.position.lerp(target,0.01);
+    });
+  }
+
+  renderer.render(scene,camera);
+}
+animate();
+</script>
+
+</body>
+</html>
